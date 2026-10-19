@@ -347,6 +347,38 @@
   .submit-status.ok    { color: #1A7A52; font-weight: 500; }
   .submit-status.error { color: #D94040; }
   .submit-status a { color: inherit; }
+
+  .copy-box {
+    display: none;
+    max-width: 480px;
+    margin: 18px auto 0;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--text);
+  }
+  .copy-box p { margin: 0 0 12px; }
+  .copy-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .copy-btn {
+    padding: 9px 20px;
+    border-radius: var(--radius);
+    border: 1px solid var(--navy);
+    background: var(--navy);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .copy-btn.secondary { background: transparent; color: var(--navy); }
+  .copy-btn:disabled { opacity: .6; cursor: default; }
+  #copy-email-row { display: none; margin-top: 12px; }
+  #copy-email-row .name-input { max-width: 260px; }
+  .copy-msg { margin-top: 10px; min-height: 1em; }
+  .copy-msg.ok { color: #1A7A52; font-weight: 500; }
+  .copy-msg.error { color: #D94040; }
   
 
   /* ── Print ── */
@@ -431,6 +463,19 @@
 
   <button class="return-btn" id="submit-btn" onclick="sendEmail()">Submit to LeaderExcellence, LLC</button>
   <div class="submit-status" id="submit-status" role="status" aria-live="polite"></div>
+
+  <div class="copy-box" id="copy-box">
+    <p>Would you like a copy of your responses sent to your email?</p>
+    <div class="copy-row" id="copy-choice">
+      <button class="copy-btn" onclick="copyYes()">Yes, please</button>
+      <button class="copy-btn secondary" onclick="copyNo()">No, thanks</button>
+    </div>
+    <div class="copy-row" id="copy-email-row">
+      <input type="email" id="copy-email" class="name-input" autocomplete="email" placeholder="your.email@company.com">
+      <button class="copy-btn" id="copy-send" onclick="sendCopy()">Send my copy</button>
+    </div>
+    <div class="copy-msg" id="copy-msg" role="status" aria-live="polite"></div>
+  </div>
 
   <p class="attrib">Adapted from Center for Creative Leadership DAC survey</p>
 </div>
@@ -634,7 +679,9 @@ function sendEmail() {
     btn.textContent = 'Submitted ✓';
     status.className = 'submit-status ok';
     status.textContent = 'Thank you, ' + respondent.split(' ')[0] +
-      '. Your responses have been sent to LeaderExcellence. You can close this page.';
+      '. Your responses have been sent to LeaderExcellence.';
+    lastSubmission = { respondent, body };
+    document.getElementById('copy-box').style.display = 'block';
   })
   .catch(() => {
     btn.disabled = false;
@@ -646,6 +693,67 @@ function sendEmail() {
 }
 
 const SUBMIT_TO = 'len@leaderexcellence.net';
+let lastSubmission = null;
+
+function copyYes() {
+  document.getElementById('copy-choice').style.display = 'none';
+  document.getElementById('copy-email-row').style.display = 'flex';
+  document.getElementById('copy-email').focus();
+}
+
+function copyNo() {
+  document.getElementById('copy-choice').style.display = 'none';
+  const msg = document.getElementById('copy-msg');
+  msg.className = 'copy-msg';
+  msg.textContent = 'No problem. You can close this page.';
+}
+
+function sendCopy() {
+  if (!lastSubmission) return;
+  const emailBox = document.getElementById('copy-email');
+  const sendBtn  = document.getElementById('copy-send');
+  const msg      = document.getElementById('copy-msg');
+  const email    = emailBox.value.trim();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    emailBox.classList.add('missing');
+    msg.className = 'copy-msg error';
+    msg.textContent = 'Please enter a valid email address.';
+    return;
+  }
+  emailBox.classList.remove('missing');
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Sending…';
+  msg.className = 'copy-msg';
+  msg.textContent = '';
+
+  // FormSubmit delivers to Len and copies (_cc) the respondent.
+  fetch('https://formsubmit.co/ajax/' + SUBMIT_TO, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({
+      _subject: 'Your DAC Survey Responses — ' + lastSubmission.respondent,
+      _template: 'box',
+      _captcha: 'false',
+      _cc: email,
+      Respondent: lastSubmission.respondent,
+      Results: lastSubmission.body
+    })
+  })
+  .then(r => r.json().then(data => ({ ok: r.ok, data })))
+  .then(({ ok, data }) => {
+    if (!ok || String(data.success) !== 'true') throw new Error(data.message || 'Send failed');
+    document.getElementById('copy-email-row').style.display = 'none';
+    msg.className = 'copy-msg ok';
+    msg.textContent = 'A copy is on its way to ' + email + '. You can close this page.';
+  })
+  .catch(() => {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send my copy';
+    msg.className = 'copy-msg error';
+    msg.textContent = 'Sorry, the copy couldn’t be sent. Please check the address and try again.';
+  });
+}
 
 // Build DOM
 const container = document.getElementById('questions-container');
