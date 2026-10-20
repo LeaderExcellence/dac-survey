@@ -374,9 +374,7 @@
   }
   .copy-btn.secondary { background: transparent; color: var(--navy); }
   .copy-btn:disabled { opacity: .6; cursor: default; }
-  #copy-email-row { display: none; margin-top: 12px; }
-  #copy-email-row .name-input { max-width: 260px; }
-  .copy-msg { margin-top: 10px; min-height: 1em; }
+    .copy-msg { margin-top: 10px; min-height: 1em; }
   .copy-msg.ok { color: #1A7A52; font-weight: 500; }
   .copy-msg.error { color: #D94040; }
   
@@ -465,14 +463,9 @@
   <div class="submit-status" id="submit-status" role="status" aria-live="polite"></div>
 
   <div class="copy-box" id="copy-box">
-    <p>Would you like a copy of your responses sent to your email?</p>
-    <div class="copy-row" id="copy-choice">
-      <button class="copy-btn" onclick="copyYes()">Yes, please</button>
-      <button class="copy-btn secondary" onclick="copyNo()">No, thanks</button>
-    </div>
-    <div class="copy-row" id="copy-email-row">
-      <input type="email" id="copy-email" class="name-input" autocomplete="email" placeholder="your.email@company.com">
-      <button class="copy-btn" id="copy-send" onclick="sendCopy()">Send my copy</button>
+    <p>Want to keep a record of your answers?</p>
+    <div class="copy-row">
+      <button class="copy-btn" onclick="downloadCopy()">Download a copy of my responses</button>
     </div>
     <div class="copy-msg" id="copy-msg" role="status" aria-live="polite"></div>
   </div>
@@ -695,64 +688,21 @@ function sendEmail() {
 const SUBMIT_TO = 'len@leaderexcellence.net';
 let lastSubmission = null;
 
-function copyYes() {
-  document.getElementById('copy-choice').style.display = 'none';
-  document.getElementById('copy-email-row').style.display = 'flex';
-  document.getElementById('copy-email').focus();
-}
-
-function copyNo() {
-  document.getElementById('copy-choice').style.display = 'none';
-  const msg = document.getElementById('copy-msg');
-  msg.className = 'copy-msg';
-  msg.textContent = 'No problem. You can close this page.';
-}
-
-function sendCopy() {
+function downloadCopy() {
   if (!lastSubmission) return;
-  const emailBox = document.getElementById('copy-email');
-  const sendBtn  = document.getElementById('copy-send');
-  const msg      = document.getElementById('copy-msg');
-  const email    = emailBox.value.trim();
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    emailBox.classList.add('missing');
-    msg.className = 'copy-msg error';
-    msg.textContent = 'Please enter a valid email address.';
-    return;
-  }
-  emailBox.classList.remove('missing');
-  sendBtn.disabled = true;
-  sendBtn.textContent = 'Sending…';
-  msg.className = 'copy-msg';
-  msg.textContent = '';
-
-  // FormSubmit delivers to Len and copies (_cc) the respondent.
-  fetch('https://formsubmit.co/ajax/' + SUBMIT_TO, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({
-      _subject: 'Your DAC Survey Responses — ' + lastSubmission.respondent,
-      _template: 'box',
-      _captcha: 'false',
-      _cc: email,
-      Respondent: lastSubmission.respondent,
-      Results: lastSubmission.body
-    })
-  })
-  .then(r => r.json().then(data => ({ ok: r.ok, data })))
-  .then(({ ok, data }) => {
-    if (!ok || String(data.success) !== 'true') throw new Error(data.message || 'Send failed');
-    document.getElementById('copy-email-row').style.display = 'none';
-    msg.className = 'copy-msg ok';
-    msg.textContent = 'A copy is on its way to ' + email + '. You can close this page.';
-  })
-  .catch(() => {
-    sendBtn.disabled = false;
-    sendBtn.textContent = 'Send my copy';
-    msg.className = 'copy-msg error';
-    msg.textContent = 'Sorry, the copy couldn’t be sent. Please check the address and try again.';
-  });
+  const msg  = document.getElementById('copy-msg');
+  const text = lastSubmission.body.replace(/\n/g, '\r\n');  // opens cleanly in Notepad too
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const safeName = lastSubmission.respondent.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'Respondent';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'DAC_Survey_Responses_' + safeName + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  msg.className = 'copy-msg ok';
+  msg.textContent = 'Your copy has been downloaded. You can close this page.';
 }
 
 // Build DOM
